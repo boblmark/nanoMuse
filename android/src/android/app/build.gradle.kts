@@ -216,6 +216,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$cameraX")
     implementation("androidx.camera:camera-lifecycle:$cameraX")
     implementation("androidx.camera:camera-view:$cameraX")
+    // nanoMuse: Guava ListenableFuture for ProcessCameraProvider.getInstance().addListener
+    implementation("com.google.guava:guava:31.1-android")
 
     // [T-android-tablet-split] Adaptive list-detail layout for tablets/large
     // windows. Version pinned explicitly rather than left to the BOM: the

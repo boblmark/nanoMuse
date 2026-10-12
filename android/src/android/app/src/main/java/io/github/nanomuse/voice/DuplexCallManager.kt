@@ -65,6 +65,12 @@ class DuplexCallManager(
 ) {
     companion object {
         private const val TAG = "DuplexCall"
+        // nanoMuse: 模型选择（2026-10-12）
+        val AVAILABLE_MODELS = listOf(
+            "gemini-2.0-flash-exp",
+            "gemini-2.5-flash-preview-04-17",
+            "gemini-1.5-flash",
+        )
         
         // 音频参数（与服务端 webm_to_pcm16 对齐：16kHz mono PCM16）
         private const val SAMPLE_RATE = 16000
@@ -115,13 +121,6 @@ class DuplexCallManager(
     var videoEnabled: Boolean = false
     // nanoMuse: 模型选择（2026-10-12）
     var selectedModel: String = "gemini-2.0-flash-exp"
-    companion object {
-        val AVAILABLE_MODELS = listOf(
-            "gemini-2.0-flash-exp",
-            "gemini-2.5-flash-preview-04-17",
-            "gemini-1.5-flash",
-        )
-    }
     
     private val audioManager: AudioManager =
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
