@@ -1,0 +1,120 @@
+name: Android
+
+# A debug APK (arm64-v8a) for every push and pull request that touches the
+# Android tree. Debug-signed only: no keystore and no secrets are involved;
+# release builds happen on a developer machine with scripts/release-apk.sh.
+
+on:
+  push:
+    branches: [feat/native-video-call]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  NDK_VERSION: 27.2.12479018
+
+jobs:
+  # The path filter is a job, not `on.push.paths`, so the build is reported as skipped rather
+  # than absent when the Android tree is untouched: branch protection requires this check,
+  # and a check that never reports would block every docs-only pull request.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            android:
+              - "android/**"
+              - "scripts/android/**"
+              - "scripts/rebrand.py"
+              - "scripts/gen-android-icons.py"
+              - ".github/workflows/android.yml"
+
+  debug-apk:
+    name: debug APK · arm64-v8a
+    needs: changes
+    if: needs.changes.outputs.android == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive # android/deps/proot (our fork)
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-go@v7
+        with:
+          # gomobile@latest wants the current Go; GOTOOLCHAIN=auto below lets `go` fetch a
+          # newer one when it asks for it (setup-go v6+ pins the toolchain otherwise).
+          go-version: "1.26"
+          cache-dependency-path: android/deps/rclone-mobile/go.sum
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platforms;android-36 build-tools;35.0.0 cmake;3.22.1 ndk;${{ env.NDK_VERSION }}
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Native artifacts (proot, Alpine rootfs, rclone.aar)
+        env:
+          GOTOOLCHAIN: auto
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          export GOROOT="$(go env GOROOT)" GOPATH="$(go env GOPATH)"
+          export PATH="$GOPATH/bin:$PATH" # gomobile / gobind land there
+          bash scripts/android/build-natives.sh
+
+      - name: assembleDebug
+        working-directory: android/src/android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          ./gradlew :app:assembleDebug --console=plain --no-daemon
+
+      # Our unit tests (io.github.nanomuse.*: the guards, the hub client, the sandbox paths, the
+      # strings' parity), plus the upstream provider and sandbox tests, the two OpenMinis packages
+      # our edits touch (#333, #334, #335). Same Gradle invocation as AGENTS.md; the compiled
+      # classes are warm.
+      - name: Unit tests
+        working-directory: android/src/android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          ./gradlew :app:testDebugUnitTest --tests 'io.github.nanomuse.*' \
+            --tests 'com.openminis.app.provider.*' --tests 'com.openminis.app.sandbox.*' \
+            --console=plain --no-daemon
+
+      # The on-device tests cannot run here (no emulator), but the source set must keep
+      # compiling or io.github.nanomuse.reach.ReachHubInstrumentedTest never runs anywhere (#332).
+      - name: androidTest compiles
+        working-directory: android/src/android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          ./gradlew :app:compileDebugAndroidTestKotlin --console=plain --no-daemon
+
+      - name: Badging
+        run: |
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$bt/aapt" dump badging android/src/android/app/build/outputs/apk/debug/app-debug.apk | grep -E "^package:|application-label:|native-code"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nanoMuse-debug-apk
+          path: android/src/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
