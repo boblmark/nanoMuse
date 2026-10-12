@@ -61,7 +61,7 @@ import java.util.concurrent.TimeUnit
  */
 class DuplexCallManager(
     private val context: Context,
-    private val serverUrl: String = "wss://nano.viralloopapp.com",
+    private val serverUrl: String = "wss://nano.viralloopapp.com/voice",
 ) {
     companion object {
         private const val TAG = "DuplexCall"
