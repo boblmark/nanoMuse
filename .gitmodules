@@ -1,0 +1,8 @@
+[submodule "android/deps/proot"]
+	path = android/deps/proot
+	url = https://github.com/nano-muse/proot.git
+	branch = master
+[submodule "android/deps/ish"]
+	path = android/deps/ish
+	url = https://github.com/OpenMinis/ish-arm64.git
+	branch = master
